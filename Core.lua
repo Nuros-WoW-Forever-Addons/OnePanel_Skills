@@ -107,16 +107,19 @@ local function SafeGetSkillLineInfo(index)
     if GetSkillLineInfo then
         local ok, skillName, isHeader, isExpanded, skillRank, numTempPoints, skillModifier, skillMaxRank, isAbandonable, stepCost, rankCost, minLevel, skillCostType = pcall(GetSkillLineInfo, index)
         if ok and skillName then
+            local headerBool = (isHeader == 1 or isHeader == true)
+            local expandedBool = (isExpanded == 1 or isExpanded == true)
+            local abandonBool = (isAbandonable == 1 or isAbandonable == true)
             return {
                 index = index,
                 name = skillName,
-                isHeader = isHeader and true or false,
-                isExpanded = isExpanded and true or false,
+                isHeader = headerBool,
+                isExpanded = expandedBool,
                 rank = skillRank or 0,
                 tempPoints = numTempPoints or 0,
                 modifier = skillModifier or 0,
                 maxRank = skillMaxRank or 0,
-                isAbandonable = isAbandonable and true or false,
+                isAbandonable = abandonBool,
                 stepCost = stepCost or 0,
                 rankCost = rankCost or 0,
                 minLevel = minLevel or 0,
@@ -125,6 +128,15 @@ local function SafeGetSkillLineInfo(index)
         end
     end
     return nil
+end
+
+local function SafeToggleSkillHeader(index, isExpanded)
+    if not index or index < 1 then return end
+    if isExpanded then
+        if CollapseSkillHeader then pcall(CollapseSkillHeader, index) end
+    else
+        if ExpandSkillHeader then pcall(ExpandSkillHeader, index) end
+    end
 end
 
 local function SafeGetSkillDescription(index, skillName)
@@ -139,114 +151,261 @@ local function SafeGetSkillDescription(index, skillName)
 end
 
 -------------------------------------------------------------------------------
+-- Silver Action Button Helper (Matches OnePanel_Reputation)
+-------------------------------------------------------------------------------
+
+local function CreateSilverActionButton(parent, name, text)
+    local btn = CreateFrame("Button", name, parent, "UIPanelButtonTemplate")
+    btn:SetText(text)
+    if Utils and Utils.StyleButtonAsMetal then
+        Utils:StyleButtonAsMetal(btn)
+    end
+    return btn
+end
+
+-------------------------------------------------------------------------------
 -- View Construction: CreateSkillsView
 -------------------------------------------------------------------------------
 
-local function CreateSkillsView(parent)
-    local container = CreateFrame("Frame", "OnePanel_SkillsView", parent)
-    container:SetAllPoints(parent)
+local function CreateSkillsView(parentFrame)
+    local container = CreateFrame("Frame", "OnePanel_SkillsContainer", parentFrame)
+    container:SetAllPoints(parentFrame)
     
-    local searchQuery = ""
     local selectedSkillName = nil
     local selectedSkillIndex = nil
-    local collapsedHeaders = {}
+    local searchQuery = ""
+    local allCollapsed = false
     
     ---------------------------------------------------------------------------
-    -- Left Area: Search Bar & Skills ScrollFrame
+    -- Left Area: Search Bar, Category Controls & Skills Scroll List
     ---------------------------------------------------------------------------
     
-    local leftPanel = CreateFrame("Frame", nil, container)
-    leftPanel:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
-    leftPanel:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", 0, 0)
-    leftPanel:SetWidth(340)
+    local leftArea = CreateFrame("Frame", "OnePanel_SkillsLeftArea", container)
+    leftArea:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
+    leftArea:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", 0, 0)
+    leftArea:SetWidth(338)
+    container.LeftArea = leftArea
+    
+    -- Top Control Bar (Search Input + Collapse/Expand All + Summary)
+    -- Positioned at y = -52 to completely clear the top-left circular portrait ring
+    local topBar = CreateFrame("Frame", "OnePanel_SkillsTopBar", leftArea)
+    topBar:SetPoint("TOPLEFT", leftArea, "TOPLEFT", 10, -52)
+    topBar:SetPoint("TOPRIGHT", leftArea, "TOPRIGHT", -12, -52)
+    topBar:SetHeight(26)
     
     -- Search EditBox
-    local searchContainer = CreateFrame("Frame", nil, leftPanel, "BackdropTemplate")
-    searchContainer:SetPoint("TOPLEFT", leftPanel, "TOPLEFT", 12, -8)
-    searchContainer:SetPoint("TOPRIGHT", leftPanel, "TOPRIGHT", -12, -8)
-    searchContainer:SetHeight(26)
-    searchContainer:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 12,
-        insets = { left = 3, right = 3, top = 3, bottom = 3 }
-    })
-    searchContainer:SetBackdropColor(0.04, 0.04, 0.06, 0.85)
-    searchContainer:SetBackdropBorderColor(0.60, 0.50, 0.25, 0.8)
-    
-    local searchIcon = searchContainer:CreateTexture(nil, "ARTWORK")
-    searchIcon:SetSize(14, 14)
-    searchIcon:SetPoint("LEFT", searchContainer, "LEFT", 6, 0)
-    searchIcon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
-    searchIcon:SetVertexColor(0.7, 0.7, 0.7)
-    
-    local searchBox = CreateFrame("EditBox", "OnePanel_SkillsSearchBox", searchContainer)
-    searchBox:SetPoint("LEFT", searchIcon, "RIGHT", 4, 0)
-    searchBox:SetPoint("RIGHT", searchContainer, "RIGHT", -22, 0)
-    searchBox:SetHeight(20)
-    searchBox:SetFontObject("GameFontHighlightSmall")
+    local searchBox = CreateFrame("EditBox", "OnePanel_SkillsSearchBox", topBar, "InputBoxTemplate")
+    searchBox:SetSize(130, 22)
+    searchBox:SetPoint("LEFT", topBar, "LEFT", 2, 0)
     searchBox:SetAutoFocus(false)
+    searchBox:SetMaxLetters(40)
     
-    local searchPlaceholder = searchContainer:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    searchPlaceholder:SetPoint("LEFT", searchBox, "LEFT", 0, 0)
-    searchPlaceholder:SetText("Search skills, professions, weapons...")
+    local searchHint = searchBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    searchHint:SetPoint("LEFT", searchBox, "LEFT", 4, 0)
+    searchHint:SetText("Search skills...")
+    searchBox.Hint = searchHint
     
-    local clearBtn = CreateFrame("Button", nil, searchContainer)
-    clearBtn:SetSize(16, 16)
-    clearBtn:SetPoint("RIGHT", searchContainer, "RIGHT", -4, 0)
-    clearBtn:SetNormalTexture("Interface\\FriendsFrame\\ClearBroadcastIcon")
-    clearBtn:SetAlpha(0.6)
-    clearBtn:Hide()
+    -- Search Clear Button
+    local clearSearchBtn = CreateFrame("Button", nil, searchBox)
+    clearSearchBtn:SetSize(16, 16)
+    clearSearchBtn:SetPoint("RIGHT", searchBox, "RIGHT", -4, 0)
+    clearSearchBtn:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
+    clearSearchBtn:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight", "ADD")
+    clearSearchBtn:Hide()
     
-    clearBtn:SetScript("OnClick", function()
+    clearSearchBtn:SetScript("OnClick", function()
         searchBox:SetText("")
         searchBox:ClearFocus()
     end)
     
-    -- ScrollFrame Container
-    local scrollFrame = CreateFrame("ScrollFrame", "OnePanel_SkillsScrollFrame", leftPanel, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", searchContainer, "BOTTOMLEFT", 0, -8)
-    scrollFrame:SetPoint("BOTTOMRIGHT", leftPanel, "BOTTOMRIGHT", -28, 10)
+    local RefreshList = nil -- Forward declaration
+    
+    searchBox:SetScript("OnTextChanged", function(self)
+        local text = (self:GetText() or ""):match("^%s*(.-)%s*$")
+        searchQuery = string.lower(text or "")
+        searchHint:SetShown(searchQuery == "")
+        clearSearchBtn:SetShown(searchQuery ~= "")
+        if RefreshList then RefreshList() end
+    end)
+    
+    searchBox:SetScript("OnEscapePressed", function(self)
+        self:SetText("")
+        self:ClearFocus()
+    end)
+    searchBox:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+    end)
+    
+    -- Collapse / Expand All Button
+    local toggleAllBtn = CreateSilverActionButton(topBar, "OnePanel_SkillsToggleAllBtn", "Collapse All")
+    toggleAllBtn:SetSize(82, 22)
+    toggleAllBtn:SetPoint("LEFT", searchBox, "RIGHT", 6, 0)
+    
+    toggleAllBtn:SetScript("OnClick", function(self)
+        allCollapsed = not allCollapsed
+        local num = SafeGetNumSkillLines()
+        for i = num, 1, -1 do
+            local d = SafeGetSkillLineInfo(i)
+            if d and d.isHeader then
+                if allCollapsed and d.isExpanded then
+                    SafeToggleSkillHeader(i, true)
+                elseif not allCollapsed and not d.isExpanded then
+                    SafeToggleSkillHeader(i, false)
+                end
+            end
+        end
+        self:SetText(allCollapsed and "Expand All" or "Collapse All")
+        if RefreshList then RefreshList() end
+    end)
+    
+    -- Skills Count Summary (Top Right)
+    local skillsSummary = topBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    skillsSummary:SetPoint("RIGHT", topBar, "RIGHT", -2, 0)
+    skillsSummary:SetJustifyH("RIGHT")
+    topBar.SkillsSummary = skillsSummary
+    
+    -- Scroll View Container for Skills
+    local scrollFrame = CreateFrame("ScrollFrame", "OnePanel_SkillsScrollFrame", leftArea, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", topBar, "BOTTOMLEFT", 0, -8)
+    scrollFrame:SetPoint("BOTTOMRIGHT", leftArea, "BOTTOMRIGHT", -14, 10)
+    scrollFrame:EnableMouseWheel(true)
+    scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        local cur = self:GetVerticalScroll()
+        local maxScroll = self:GetVerticalScrollRange()
+        local step = 42
+        self:SetVerticalScroll(math.max(0, math.min(maxScroll, cur - (delta * step))))
+    end)
+    
+    local scrollBarName = scrollFrame:GetName() .. "ScrollBar"
+    local scrollBar = _G[scrollBarName]
+    if scrollBar then
+        scrollBar:ClearAllPoints()
+        scrollBar:SetPoint("TOPRIGHT", scrollFrame, "TOPRIGHT", -2, -18)
+        scrollBar:SetPoint("BOTTOMRIGHT", scrollFrame, "BOTTOMRIGHT", -2, 18)
+        scrollBar:SetValueStep(42)
+        
+        local upBtn = _G[scrollBarName .. "ScrollUpButton"]
+        local downBtn = _G[scrollBarName .. "ScrollDownButton"]
+        if upBtn then
+            upBtn:SetScript("OnClick", function()
+                local cur = scrollFrame:GetVerticalScroll()
+                scrollFrame:SetVerticalScroll(math.max(0, cur - 42))
+            end)
+        end
+        if downBtn then
+            downBtn:SetScript("OnClick", function()
+                local cur = scrollFrame:GetVerticalScroll()
+                local maxScroll = scrollFrame:GetVerticalScrollRange()
+                scrollFrame:SetVerticalScroll(math.min(maxScroll, cur + 42))
+            end)
+        end
+    end
     
     local listContent = CreateFrame("Frame", "OnePanel_SkillsListContent", scrollFrame)
-    listContent:SetWidth(298)
-    listContent:SetHeight(400)
+    listContent:SetSize(288, 400)
     scrollFrame:SetScrollChild(listContent)
-    
     listContent.rows = {}
     
     ---------------------------------------------------------------------------
-    -- Right Area: Detail Drawer
+    -- Right Area: Collapsible Side Details Panel
     ---------------------------------------------------------------------------
     
-    local rightPanel = CreateFrame("Frame", "OnePanel_SkillsDetailPanel", container, "BackdropTemplate")
-    rightPanel:SetPoint("TOPLEFT", leftPanel, "TOPRIGHT", 4, -8)
-    rightPanel:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -12, 10)
-    rightPanel:SetBackdrop({
+    local subPanel = CreateFrame("Frame", "OnePanel_SkillsSubPanel", container, "BackdropTemplate")
+    subPanel:SetPoint("TOPRIGHT", container, "TOPRIGHT", -6, -12)
+    subPanel:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -6, 12)
+    subPanel:SetWidth(198)
+    subPanel:SetBackdrop({
         bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true, tileSize = 16, edgeSize = 12,
         insets = { left = 3, right = 3, top = 3, bottom = 3 }
     })
-    rightPanel:SetBackdropColor(0.04, 0.04, 0.06, 0.85)
-    rightPanel:SetBackdropBorderColor(0.55, 0.45, 0.20, 0.7)
+    subPanel:SetBackdropColor(0.04, 0.04, 0.06, 0.85)
+    subPanel:SetBackdropBorderColor(0.55, 0.45, 0.20, 0.7)
+    container.SubPanel = subPanel
     
-    -- Detail Header & Tag
-    local detailTitle = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    detailTitle:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 14, -14)
-    detailTitle:SetPoint("TOPRIGHT", rightPanel, "TOPRIGHT", -14, -14)
+    -- Vertical Metal Divider separating list from details
+    local vDivider = container:CreateTexture("OnePanel_SkillsVerticalDivider", "OVERLAY", nil, 2)
+    vDivider:SetTexture("Interface\\FrameGeneral\\UIFrameMetalVertical")
+    vDivider:SetTexCoord(258/512, 265/512, 0, 1)
+    vDivider:SetVertTile(true)
+    vDivider:SetWidth(7)
+    vDivider:SetPoint("TOP", leftArea, "TOPRIGHT", 1, 10)
+    vDivider:SetPoint("BOTTOM", leftArea, "BOTTOMRIGHT", 1, -14)
+    container.VerticalDivider = vDivider
+    
+    -- Native Right-Side Collapse / Expand Toggle Button
+    local toggleBtn = CreateFrame("Button", "OnePanel_SkillsSideToggleButton", leftArea)
+    toggleBtn:SetSize(28, 28)
+    toggleBtn:SetPoint("TOPRIGHT", leftArea, "TOPRIGHT", -14, -18)
+    toggleBtn:SetFrameLevel(510)
+    
+    local toggleIcon = toggleBtn:CreateTexture(nil, "ARTWORK")
+    toggleIcon:SetAllPoints(toggleBtn)
+    toggleIcon:SetTexture("Interface\\Buttons\\UI-SpellbookSearch-DrillDown")
+    toggleBtn.Icon = toggleIcon
+    
+    local function UpdateToggleIcon()
+        local isExp = OnePanel and OnePanel.isExpanded ~= false
+        if isExp then
+            toggleIcon:SetTexCoord(0, 1, 0, 1)
+        else
+            toggleIcon:SetTexCoord(1, 0, 0, 1)
+        end
+    end
+    toggleBtn.UpdateIcon = UpdateToggleIcon
+    UpdateToggleIcon()
+    
+    toggleBtn:SetScript("OnClick", function()
+        if OnePanel and OnePanel.ToggleExpandState then
+            OnePanel:ToggleExpandState()
+        end
+        UpdateToggleIcon()
+    end)
+    
+    toggleBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        local isExp = OnePanel and OnePanel.isExpanded ~= false
+        GameTooltip:SetText(isExp and "Hide Details" or "Show Details", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    toggleBtn:SetScript("OnLeave", function() GameTooltip_Hide() end)
+    container.RightSideToggleButton = toggleBtn
+    
+    -- Sync subPanel and vertical divider visibility with OnePanel master expand state
+    if OnePanel then
+        subPanel:SetShown(OnePanel.isExpanded ~= false)
+        vDivider:SetShown(OnePanel.isExpanded ~= false)
+    end
+    if Utils and Utils.EventBus then
+        Utils.EventBus:Register("ONEPANEL_EXPAND_STATE_CHANGED", function(isExpanded)
+            if subPanel and subPanel.SetShown then
+                subPanel:SetShown(isExpanded)
+            end
+            if vDivider and vDivider.SetShown then
+                vDivider:SetShown(isExpanded)
+            end
+            if toggleBtn and toggleBtn.UpdateIcon then
+                toggleBtn:UpdateIcon()
+            end
+        end)
+    end
+    
+    -- SubPanel Details Widgets
+    local detailTitle = subPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    detailTitle:SetPoint("TOPLEFT", subPanel, "TOPLEFT", 10, -14)
+    detailTitle:SetPoint("TOPRIGHT", subPanel, "TOPRIGHT", -10, -14)
     detailTitle:SetJustifyH("LEFT")
     detailTitle:SetText("Select a Skill")
     
-    local detailCategory = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    detailCategory:SetPoint("TOPLEFT", detailTitle, "BOTTOMLEFT", 0, -4)
+    local detailCategory = subPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    detailCategory:SetPoint("TOPLEFT", detailTitle, "BOTTOMLEFT", 0, -3)
     detailCategory:SetText("")
     
-    -- Detail Large Status Bar
-    local detailBar = CreateFrame("StatusBar", nil, rightPanel)
-    detailBar:SetPoint("TOPLEFT", detailCategory, "BOTTOMLEFT", 0, -10)
-    detailBar:SetPoint("RIGHT", rightPanel, "RIGHT", -14, 0)
-    detailBar:SetHeight(18)
+    local detailBar = CreateFrame("StatusBar", nil, subPanel)
+    detailBar:SetPoint("TOPLEFT", detailCategory, "BOTTOMLEFT", 0, -8)
+    detailBar:SetPoint("RIGHT", subPanel, "RIGHT", -10, 0)
+    detailBar:SetHeight(16)
     detailBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
     detailBar:SetStatusBarColor(COLOR_PROFESSION.r, COLOR_PROFESSION.g, COLOR_PROFESSION.b, 1)
     
@@ -255,50 +414,36 @@ local function CreateSkillsView(parent)
     detailBarBg:SetColorTexture(0.05, 0.05, 0.07, 0.9)
     
     local detailBarText = detailBar:CreateFontString(nil, "OVERLAY")
-    detailBarText:SetFont(GetStatusBarFont(), 11, "OUTLINE")
+    detailBarText:SetFont(GetStatusBarFont(), 10, "OUTLINE")
     detailBarText:SetPoint("CENTER", detailBar, "CENTER", 0, 0)
     detailBarText:SetTextColor(1, 1, 1, 1)
     detailBarText:SetText("")
     
-    -- Detail Description
-    local detailDesc = rightPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    detailDesc:SetPoint("TOPLEFT", detailBar, "BOTTOMLEFT", 0, -12)
-    detailDesc:SetPoint("RIGHT", rightPanel, "RIGHT", -14, 0)
+    local detailDesc = subPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    detailDesc:SetPoint("TOPLEFT", detailBar, "BOTTOMLEFT", 0, -10)
+    detailDesc:SetPoint("RIGHT", subPanel, "RIGHT", -10, 0)
     detailDesc:SetJustifyH("LEFT")
     detailDesc:SetJustifyV("TOP")
     detailDesc:SetWordWrap(true)
-    detailDesc:SetHeight(120)
+    detailDesc:SetHeight(160)
     detailDesc:SetText("Select a skill from the list on the left to inspect rank details, trainer hints, or manage crafting patterns.")
     
-    -- Action Buttons Container
-    local actionsContainer = CreateFrame("Frame", nil, rightPanel)
-    actionsContainer:SetPoint("BOTTOMLEFT", rightPanel, "BOTTOMLEFT", 12, 12)
-    actionsContainer:SetPoint("BOTTOMRIGHT", rightPanel, "BOTTOMRIGHT", -12, 12)
-    actionsContainer:SetHeight(32)
+    local actionsContainer = CreateFrame("Frame", nil, subPanel)
+    actionsContainer:SetPoint("BOTTOMLEFT", subPanel, "BOTTOMLEFT", 8, 10)
+    actionsContainer:SetPoint("BOTTOMRIGHT", subPanel, "BOTTOMRIGHT", -8, 10)
+    actionsContainer:SetHeight(56)
     
-    -- Open Recipe Window Button
-    local openTradeskillBtn = CreateFrame("Button", "OnePanel_SkillsOpenTradeskillBtn", actionsContainer, "UIPanelButtonTemplate")
-    openTradeskillBtn:SetPoint("LEFT", actionsContainer, "LEFT", 0, 0)
-    openTradeskillBtn:SetSize(130, 24)
-    openTradeskillBtn:SetText("Open Recipes")
-    if Utils and Utils.StyleButtonAsMetal then
-        Utils:StyleButtonAsMetal(openTradeskillBtn)
-    end
+    local openTradeskillBtn = CreateSilverActionButton(actionsContainer, "OnePanel_SkillsOpenTradeskillBtn", "Open Recipes")
+    openTradeskillBtn:SetPoint("TOPLEFT", actionsContainer, "TOPLEFT", 0, 0)
+    openTradeskillBtn:SetPoint("TOPRIGHT", actionsContainer, "TOPRIGHT", 0, 0)
+    openTradeskillBtn:SetHeight(22)
     openTradeskillBtn:Hide()
     
-    -- Unlearn Profession Button
-    local unlearnBtn = CreateFrame("Button", "OnePanel_SkillsUnlearnBtn", actionsContainer, "UIPanelButtonTemplate")
-    unlearnBtn:SetPoint("RIGHT", actionsContainer, "RIGHT", 0, 0)
-    unlearnBtn:SetSize(110, 24)
-    unlearnBtn:SetText("Unlearn")
-    if Utils and Utils.StyleButtonAsMetal then
-        Utils:StyleButtonAsMetal(unlearnBtn)
-    end
+    local unlearnBtn = CreateSilverActionButton(actionsContainer, "OnePanel_SkillsUnlearnBtn", "Unlearn")
+    unlearnBtn:SetPoint("BOTTOMLEFT", actionsContainer, "BOTTOMLEFT", 0, 0)
+    unlearnBtn:SetPoint("BOTTOMRIGHT", actionsContainer, "BOTTOMRIGHT", 0, 0)
+    unlearnBtn:SetHeight(22)
     unlearnBtn:Hide()
-    
-    ---------------------------------------------------------------------------
-    -- Confirmation Popup for Unlearning
-    ---------------------------------------------------------------------------
     
     StaticPopupDialogs["ONEPANEL_SKILLS_UNLEARN"] = {
         text = "Are you sure you want to unlearn %s?\n\nAll recipes, patterns, and skill points will be permanently lost!",
@@ -318,10 +463,6 @@ local function CreateSkillsView(parent)
         preferredIndex = 3,
     }
     
-    ---------------------------------------------------------------------------
-    -- Detail Drawer Updater
-    ---------------------------------------------------------------------------
-    
     local function UpdateDetails(data, categoryName)
         if not data or data.isHeader then
             detailTitle:SetText("Select a Skill")
@@ -334,7 +475,7 @@ local function CreateSkillsView(parent)
         end
         
         detailTitle:SetText(data.name)
-        detailCategory:SetText(categoryName and ("|cff00ccff" .. categoryName .. "|r") or "")
+        detailCategory:SetText(categoryName and ("|cff00ccff[ " .. categoryName .. " ]|r") or "")
         
         local rank = data.rank or 0
         local maxRank = data.maxRank or 1
@@ -365,7 +506,6 @@ local function CreateSkillsView(parent)
         local desc = SafeGetSkillDescription(data.index, data.name)
         detailDesc:SetText(desc)
         
-        -- Configure Open Tradeskill button
         local tradeSpell = TRADESKILL_SPELLS[data.name]
         if tradeSpell then
             openTradeskillBtn:SetText("Open " .. data.name)
@@ -379,7 +519,6 @@ local function CreateSkillsView(parent)
             openTradeskillBtn:Hide()
         end
         
-        -- Configure Unlearn button
         if data.isAbandonable then
             unlearnBtn:SetScript("OnClick", function()
                 StaticPopup_Show("ONEPANEL_SKILLS_UNLEARN", data.name, nil, { index = data.index })
@@ -398,7 +537,7 @@ local function CreateSkillsView(parent)
         if listContent.rows[idx] then return listContent.rows[idx] end
         
         local row = CreateFrame("Button", "OnePanel_SkillsRow" .. idx, listContent)
-        row:SetWidth(294)
+        row:SetWidth(286)
         row:SetHeight(38)
         
         local bg = row:CreateTexture(nil, "BACKGROUND")
@@ -436,14 +575,14 @@ local function CreateSkillsView(parent)
         -- Skill row elements
         local nameText = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         nameText:SetPoint("LEFT", row, "LEFT", 10, 0)
-        nameText:SetPoint("RIGHT", row, "RIGHT", -150, 0)
+        nameText:SetPoint("RIGHT", row, "RIGHT", -145, 0)
         nameText:SetJustifyH("LEFT")
         nameText:SetWordWrap(false)
         row.NameText = nameText
         
         local bar = CreateFrame("StatusBar", nil, row)
-        bar:SetSize(140, 16)
-        bar:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        bar:SetSize(135, 16)
+        bar:SetPoint("RIGHT", row, "RIGHT", -6, 0)
         bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
         
         local barBg = bar:CreateTexture(nil, "BACKGROUND")
@@ -471,7 +610,7 @@ local function CreateSkillsView(parent)
     -- Skills List Refresh & Filter Engine
     ---------------------------------------------------------------------------
     
-    local function RefreshList()
+    RefreshList = function()
         for _, r in ipairs(listContent.rows) do r:Hide() end
         
         local totalLines = SafeGetNumSkillLines()
@@ -480,43 +619,52 @@ local function CreateSkillsView(parent)
         local currentCategory = "General"
         local selectedData = nil
         local selectedCat = "General"
+        local totalSkillsCount = 0
+        
+        -- Count total actual skills
+        for i = 1, totalLines do
+            local d = SafeGetSkillLineInfo(i)
+            if d and not d.isHeader then
+                totalSkillsCount = totalSkillsCount + 1
+            end
+        end
+        topBar.SkillsSummary:SetText(string.format("|cff00e6b3Skills: %d|r", totalSkillsCount))
         
         for i = 1, totalLines do
             local d = SafeGetSkillLineInfo(i)
             if d then
                 if d.isHeader then
                     currentCategory = d.name
-                    local isCollapsed = collapsedHeaders[d.name] or false
                     
                     local row = GetOrCreateRow(rowIndex)
                     row:ClearAllPoints()
                     row:SetPoint("TOPLEFT", listContent, "TOPLEFT", 1, yOffset)
                     row:SetHeight(26)
-                    row.Bg:SetColorTexture(0.14, 0.14, 0.18, 0.95)
+                    row.Bg:SetColorTexture(0.16, 0.16, 0.20, 0.95)
                     
                     row.HeaderText:Show()
                     row.HeaderText:SetText(d.name)
                     
                     row.HeaderIcon:Show()
-                    row.HeaderIcon:SetTexture(isCollapsed and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up")
+                    row.HeaderIcon:SetTexture(d.isExpanded and "Interface\\Buttons\\UI-MinusButton-Up" or "Interface\\Buttons\\UI-PlusButton-Up")
                     
                     row.HeaderCount:Hide()
                     row.NameText:Hide()
                     row.Bar:Hide()
                     row.SelectedHighlight:Hide()
                     
+                    local headerIndex = d.index
+                    local wasExpanded = d.isExpanded
                     row:SetScript("OnClick", function()
-                        collapsedHeaders[d.name] = not collapsedHeaders[d.name]
+                        SafeToggleSkillHeader(headerIndex, wasExpanded)
                         RefreshList()
                     end)
                     
                     row:Show()
                     rowIndex = rowIndex + 1
-                    yOffset = yOffset - 28
+                    yOffset = yOffset - 30
                 else
-                    local isCollapsed = collapsedHeaders[currentCategory] or false
-                    local shouldShow = not isCollapsed
-                    
+                    local shouldShow = true
                     if searchQuery ~= "" then
                         local match = string.find(string.lower(d.name or ""), searchQuery, 1, true)
                         shouldShow = (match ~= nil)
@@ -526,12 +674,12 @@ local function CreateSkillsView(parent)
                         local row = GetOrCreateRow(rowIndex)
                         row:ClearAllPoints()
                         row:SetPoint("TOPLEFT", listContent, "TOPLEFT", 1, yOffset)
-                        row:SetHeight(34)
+                        row:SetHeight(38)
                         
                         if rowIndex % 2 == 1 then
-                            row.Bg:SetColorTexture(0.08, 0.08, 0.11, 0.7)
+                            row.Bg:SetColorTexture(0.10, 0.10, 0.12, 0.7)
                         else
-                            row.Bg:SetColorTexture(0.04, 0.04, 0.06, 0.7)
+                            row.Bg:SetColorTexture(0.05, 0.05, 0.07, 0.7)
                         end
                         
                         row.HeaderText:Hide()
@@ -566,7 +714,7 @@ local function CreateSkillsView(parent)
                             row.BarText:SetText(string.format("%s / %s", FormatNumber(rank), FormatNumber(maxRank)))
                         end
                         
-                        -- Track selection
+                        -- Selection match
                         if not selectedSkillName and not d.isHeader then
                             selectedSkillName = d.name
                             selectedSkillIndex = d.index
@@ -589,55 +737,21 @@ local function CreateSkillsView(parent)
                         
                         row:Show()
                         rowIndex = rowIndex + 1
-                        yOffset = yOffset - 36
+                        yOffset = yOffset - 42
                     end
                 end
             end
         end
         
-        listContent:SetHeight(math.abs(yOffset) + 20)
+        listContent:SetHeight(math.abs(yOffset) + 30)
         UpdateDetails(selectedData, selectedCat)
-    end
-    
-    container.Refresh = RefreshList
-    
-    -- SearchBox Event Handlers
-    searchBox:SetScript("OnTextChanged", function(self)
-        searchQuery = string.lower(string.trim(self:GetText() or ""))
-        searchPlaceholder:SetShown(searchQuery == "")
-        clearBtn:SetShown(searchQuery ~= "")
-        RefreshList()
-    end)
-    
-    searchBox:SetScript("OnEscapePressed", function(self)
-        self:SetText("")
-        self:ClearFocus()
-    end)
-    
-    -- Drawer Expansion Synchronization
-    local function ApplyExpandState(isExpanded)
-        if isExpanded then
-            rightPanel:Show()
-            leftPanel:SetWidth(340)
-            scrollFrame:SetPoint("BOTTOMRIGHT", leftPanel, "BOTTOMRIGHT", -28, 10)
-        else
-            rightPanel:Hide()
-            leftPanel:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
-            scrollFrame:SetPoint("BOTTOMRIGHT", leftPanel, "BOTTOMRIGHT", -28, 10)
+        
+        if Utils and Utils.Logger then
+            Utils.Logger:Log("OnePanel_Skills", "DEBUG", string.format("RefreshList: rendered %d items, totalSkills = %d, totalLines = %d", rowIndex - 1, totalSkillsCount, totalLines))
         end
     end
     
-    if Utils and Utils.EventBus then
-        Utils.EventBus:Register("ONEPANEL_EXPAND_STATE_CHANGED", function(expanded)
-            ApplyExpandState(expanded)
-        end)
-    end
-    
-    if OnePanel and OnePanel.isExpanded ~= nil then
-        ApplyExpandState(OnePanel.isExpanded)
-    else
-        ApplyExpandState(true)
-    end
+    container.Refresh = RefreshList
     
     ---------------------------------------------------------------------------
     -- Event Listener
@@ -693,3 +807,17 @@ loadFrame:SetScript("OnEvent", function(self, event)
     RegisterSkillsPlugin()
     self:UnregisterEvent("PLAYER_LOGIN")
 end)
+
+-- Slash command for debugging skills state in-game
+SLASH_OPSKILLS1 = "/opskills"
+SlashCmdList["OPSKILLS"] = function()
+    local total = SafeGetNumSkillLines()
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[OnePanel_Skills Debug]|r Total lines: " .. tostring(total))
+    for i = 1, total do
+        local d = SafeGetSkillLineInfo(i)
+        if d then
+            DEFAULT_CHAT_FRAME:AddMessage(string.format("  [%d] %s '%s' rank=%d/%d isExpanded=%s", 
+                i, d.isHeader and "|cffffcc00[HEADER]|r" or "|cff00ff00[SKILL]|r", d.name, d.rank, d.maxRank, tostring(d.isExpanded)))
+        end
+    end
+end
