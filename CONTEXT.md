@@ -17,7 +17,7 @@
 - **Rollback Target**: Last working `main` branch commit
 - **Release Package**: `.github/workflows/package.yml` generates `OnePanel_Skills-latest.zip` on push to `main`
 - **Dependencies**: `OnePanel`, `OnePanelUtils`
-- **Target WoW Runtimes**: WoW Forever Beta (v1.60.1 / Interface 16001), Vanilla 1.12 (`11200`), WotLK 3.3.5 (`30300`), Modern WoW (`110000+`)
+- **Target WoW Runtimes**: WoW Forever Beta (v1.60.1 / Interface 16001)
 - **Primary Goal**: Deliver a rich, interactive Skills management interface docked into OnePanel, providing clean categorization (Professions, Secondary, Weapon, Armor, Language), high-contrast progress bars, real-time search, and an expandable detail drawer with profession actions.
 
 ---
@@ -68,6 +68,9 @@ When picking up development on this addon:
 - Initial scaffold and repository setup.
 - Core skills view implementation with categorized scroll list and progress bars.
 - Live search filter and drawer synchronization with `ONEPANEL_EXPAND_STATE_CHANGED`.
+- Upgraded engine integration to WoW Forever Beta (1.60.1 / Interface 16001) using `C_SkillInfo` API with legacy Classic Era fallback.
+- Added Camelot combat rating breakdown (Hit/Dodge/Parry & Crit offset vs same level and vs boss +3) for weapon proficiency skills.
+- Refactored category headers from `-` / `+` title bars to grey button banners (`UIPanelButtonTemplate` with centered text and `:Disable()`) matching the visual style of the Character Stats subpanel while maintaining interactive expand/collapse.
 
 ---
 

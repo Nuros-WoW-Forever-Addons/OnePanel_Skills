@@ -355,7 +355,9 @@ end
 local function CreateSilverActionButton(parent, name, text)
     local btn = CreateFrame("Button", name, parent, "UIPanelButtonTemplate")
     btn:SetText(text)
-    if Utils and Utils.StyleButtonAsMetal then
+    if Utils and Utils.FrameHelper and Utils.FrameHelper.StyleButtonAsMetal then
+        Utils.FrameHelper:StyleButtonAsMetal(btn)
+    elseif Utils and Utils.StyleButtonAsMetal then
         Utils:StyleButtonAsMetal(btn)
     end
     return btn
@@ -769,6 +771,7 @@ local function CreateSkillsView(parentFrame)
         -- Header Button (matches Character Stats button banner style with centered text)
         local headerBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
         headerBtn:SetAllPoints(row)
+        headerBtn:Disable()
         headerBtn:Hide()
         row.HeaderButton = headerBtn
 
@@ -847,7 +850,6 @@ local function CreateSkillsView(parentFrame)
                     row:ClearAllPoints()
                     row:SetPoint("TOPLEFT", listContent, "TOPLEFT", 1, yOffset)
                     row:SetHeight(22)
-                    row:SetScript("OnClick", nil)
 
                     row.Bg:Hide()
                     row.Highlight:Hide()
@@ -855,13 +857,22 @@ local function CreateSkillsView(parentFrame)
                     row.NameText:Hide()
                     row.Bar:Hide()
 
-                    row.HeaderButton:Show()
-                    row.HeaderButton:SetAllPoints(row)
-                    row.HeaderButton:SetText(d.name)
+                    local headerBtn = row.HeaderButton
+                    headerBtn:Show()
+                    headerBtn:SetAllPoints(row)
+                    headerBtn:SetText(d.name)
+                    headerBtn:Disable()
+                    headerBtn:EnableMouse(true)
 
                     local headerIndex = d.index
                     local wasExpanded = d.isExpanded
-                    row.HeaderButton:SetScript("OnClick", function()
+                    headerBtn:SetScript("OnMouseUp", function(self, button)
+                        if button == "LeftButton" then
+                            SafeToggleSkillHeader(headerIndex, wasExpanded)
+                            RefreshList()
+                        end
+                    end)
+                    row:SetScript("OnClick", function()
                         SafeToggleSkillHeader(headerIndex, wasExpanded)
                         RefreshList()
                     end)

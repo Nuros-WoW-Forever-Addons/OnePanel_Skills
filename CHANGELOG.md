@@ -14,3 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Interactive Detail Drawer**: Expandable right-hand panel displaying detailed skill descriptions, trainer hints, and crafting launch capabilities.
 - **Live Search Filtering**: Search bar for real-time skill name lookup and instant list narrowing.
 - **OnePanel Docking**: Direct integration with OnePanel as Tab 3 (Order: 30, Icon: `Interface\Icons\Trade_BlackSmithing`).
+- **WoW Forever Camelot Compatibility**: Full integration with `C_SkillInfo` API and category filtering for WoW Forever Beta (v1.60.1 / Interface 16001).
+- **Weapon Combat Ratings**: Live combat rating breakdown (Hit/Dodge/Parry & Crit offset vs same level and vs boss +3) in the skill detail drawer.
+- **Character Stats Styled Category Headers**: Clean grey button banners (`UIPanelButtonTemplate` with centered titles) matching the Character Stats subpanel design.
