@@ -10,7 +10,7 @@
 - **Current Version**: 0.0.1
 - **Suite**: Part of the **OneSuite** family (OnePanel Plugin)
 - **GitHub Repository**:
-  - Exists: FALSE (Pending initial commit/push)
+  - Exists: TRUE
   - URL: https://github.com/Nuros-WoW-Forever-Addons/OnePanel_Skills
 - **Branching Policy**: All new features must be developed on a branch != `main` (e.g. `dev`, `feature/<name>`)
 - **Live Sync Path**: `/Applications/World of Warcraft/_classic_beta_/Interface/AddOns/OnePanel_Skills/`
