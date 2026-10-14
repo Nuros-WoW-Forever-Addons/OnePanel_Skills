@@ -139,6 +139,64 @@ local function SafeToggleSkillHeader(index, isExpanded)
     end
 end
 
+local function ExpandAllHeaders()
+    if ExpandSkillHeader then
+        pcall(ExpandSkillHeader, 0)
+    end
+end
+
+local function EnsureSkillDataLoaded()
+    local count = SafeGetNumSkillLines()
+    if count > 0 then return count end
+    
+    -- Strategy 1: Call native SkillFrame_UpdateSkills if loaded
+    if type(SkillFrame_UpdateSkills) == "function" then
+        pcall(SkillFrame_UpdateSkills)
+        count = SafeGetNumSkillLines()
+        if count > 0 then return count end
+    end
+    
+    -- Strategy 2: Briefly show SkillFrame to trigger client skill cache request
+    local sf = _G["SkillFrame"]
+    if sf and sf.Show then
+        local wasShown = sf:IsShown()
+        pcall(sf.Show, sf)
+        if type(SkillFrame_OnShow) == "function" then
+            pcall(SkillFrame_OnShow)
+        end
+        count = SafeGetNumSkillLines()
+        if not wasShown and sf.Hide then
+            pcall(sf.Hide, sf)
+        end
+        if count > 0 then return count end
+    end
+    
+    -- Strategy 3: ToggleCharacter("SkillFrame", true)
+    local cf = _G["CharacterFrame"]
+    if type(ToggleCharacter) == "function" and cf then
+        local cfWasShown = cf:IsShown()
+        pcall(ToggleCharacter, "SkillFrame", true)
+        count = SafeGetNumSkillLines()
+        if not cfWasShown and cf.Hide then
+            pcall(HideUIPanel, cf)
+        end
+        if count > 0 then return count end
+    end
+    
+    -- Strategy 4: CharacterFrame_ShowSubFrame("SkillFrame")
+    if type(CharacterFrame_ShowSubFrame) == "function" and cf then
+        local cfWasShown = cf:IsShown()
+        pcall(CharacterFrame_ShowSubFrame, "SkillFrame")
+        count = SafeGetNumSkillLines()
+        if not cfWasShown and cf.Hide then
+            pcall(cf.Hide, cf)
+        end
+        if count > 0 then return count end
+    end
+    
+    return count
+end
+
 local function SafeGetSkillDescription(index, skillName)
     if GetSkillDescription then
         local ok, desc = pcall(GetSkillDescription, index)
@@ -613,6 +671,7 @@ local function CreateSkillsView(parentFrame)
     RefreshList = function()
         for _, r in ipairs(listContent.rows) do r:Hide() end
         
+        EnsureSkillDataLoaded()
         local totalLines = SafeGetNumSkillLines()
         local yOffset = -2
         local rowIndex = 1
@@ -791,8 +850,24 @@ local function RegisterSkillsPlugin()
             if OnePanel and OnePanel.SetHeaderPortrait then
                 OnePanel:SetHeaderPortrait("Interface\\Icons\\Trade_BlackSmithing", nil, false)
             end
+            EnsureSkillDataLoaded()
+            ExpandAllHeaders()
             if container and container.Refresh then
                 container:Refresh()
+            end
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.2, function()
+                    if container and container:IsVisible() and container.Refresh then
+                        EnsureSkillDataLoaded()
+                        container:Refresh()
+                    end
+                end)
+                C_Timer.After(0.5, function()
+                    if container and container:IsVisible() and container.Refresh then
+                        EnsureSkillDataLoaded()
+                        container:Refresh()
+                    end
+                end)
             end
         end,
         OnHide = function(container)
@@ -803,17 +878,30 @@ end
 
 local loadFrame = CreateFrame("Frame", "OnePanel_Skills_LoadFrame")
 loadFrame:RegisterEvent("PLAYER_LOGIN")
+loadFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 loadFrame:SetScript("OnEvent", function(self, event)
-    RegisterSkillsPlugin()
-    self:UnregisterEvent("PLAYER_LOGIN")
+    if event == "PLAYER_LOGIN" then
+        RegisterSkillsPlugin()
+    end
+    EnsureSkillDataLoaded()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(1, EnsureSkillDataLoaded)
+        C_Timer.After(3, EnsureSkillDataLoaded)
+    end
 end)
 
 -- Slash command for debugging skills state in-game
 SLASH_OPSKILLS1 = "/opskills"
 SlashCmdList["OPSKILLS"] = function()
-    local total = SafeGetNumSkillLines()
-    DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[OnePanel_Skills Debug]|r Total lines: " .. tostring(total))
-    for i = 1, total do
+    local initial = SafeGetNumSkillLines()
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[OnePanel_Skills Debug]|r Initial GetNumSkillLines = " .. tostring(initial))
+    local afterEnsure = EnsureSkillDataLoaded()
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[OnePanel_Skills Debug]|r After EnsureSkillDataLoaded = " .. tostring(afterEnsure))
+    ExpandAllHeaders()
+    local afterExpand = SafeGetNumSkillLines()
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[OnePanel_Skills Debug]|r After ExpandAllHeaders = " .. tostring(afterExpand))
+    
+    for i = 1, afterExpand do
         local d = SafeGetSkillLineInfo(i)
         if d then
             DEFAULT_CHAT_FRAME:AddMessage(string.format("  [%d] %s '%s' rank=%d/%d isExpanded=%s", 
