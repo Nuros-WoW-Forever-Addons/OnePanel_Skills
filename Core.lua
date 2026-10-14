@@ -766,19 +766,11 @@ local function CreateSkillsView(parentFrame)
         selectedHighlight:Hide()
         row.SelectedHighlight = selectedHighlight
 
-        -- Header elements
-        local headerIcon = row:CreateTexture(nil, "ARTWORK")
-        headerIcon:SetSize(14, 14)
-        headerIcon:SetPoint("LEFT", row, "LEFT", 8, 0)
-        row.HeaderIcon = headerIcon
-
-        local headerText = row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        headerText:SetPoint("LEFT", headerIcon, "RIGHT", 6, 0)
-        row.HeaderText = headerText
-
-        local headerCount = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        headerCount:SetPoint("LEFT", headerText, "RIGHT", 6, 0)
-        row.HeaderCount = headerCount
+        -- Header Button (matches Character Stats button banner style with centered text)
+        local headerBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        headerBtn:SetAllPoints(row)
+        headerBtn:Hide()
+        row.HeaderButton = headerBtn
 
         -- Skill row elements
         local nameText = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -847,33 +839,36 @@ local function CreateSkillsView(parentFrame)
                 if d.isHeader then
                     currentCategory = d.name
 
+                    if rowIndex > 1 then
+                        yOffset = yOffset - 4
+                    end
+
                     local row = GetOrCreateRow(rowIndex)
                     row:ClearAllPoints()
                     row:SetPoint("TOPLEFT", listContent, "TOPLEFT", 1, yOffset)
-                    row:SetHeight(26)
-                    row.Bg:SetColorTexture(0.16, 0.16, 0.20, 0.95)
+                    row:SetHeight(22)
+                    row:SetScript("OnClick", nil)
 
-                    row.HeaderText:Show()
-                    row.HeaderText:SetText(d.name)
-
-                    row.HeaderIcon:Show()
-                    row.HeaderIcon:SetTexture(d.isExpanded and "Interface\\Buttons\\UI-MinusButton-Up" or "Interface\\Buttons\\UI-PlusButton-Up")
-
-                    row.HeaderCount:Hide()
+                    row.Bg:Hide()
+                    row.Highlight:Hide()
+                    row.SelectedHighlight:Hide()
                     row.NameText:Hide()
                     row.Bar:Hide()
-                    row.SelectedHighlight:Hide()
+
+                    row.HeaderButton:Show()
+                    row.HeaderButton:SetAllPoints(row)
+                    row.HeaderButton:SetText(d.name)
 
                     local headerIndex = d.index
                     local wasExpanded = d.isExpanded
-                    row:SetScript("OnClick", function()
+                    row.HeaderButton:SetScript("OnClick", function()
                         SafeToggleSkillHeader(headerIndex, wasExpanded)
                         RefreshList()
                     end)
 
                     row:Show()
                     rowIndex = rowIndex + 1
-                    yOffset = yOffset - 30
+                    yOffset = yOffset - 26
                 else
                     local shouldShow = true
                     if searchQuery ~= "" then
@@ -887,15 +882,16 @@ local function CreateSkillsView(parentFrame)
                         row:SetPoint("TOPLEFT", listContent, "TOPLEFT", 1, yOffset)
                         row:SetHeight(38)
 
+                        row.HeaderButton:Hide()
+
+                        row.Bg:Show()
                         if rowIndex % 2 == 1 then
                             row.Bg:SetColorTexture(0.10, 0.10, 0.12, 0.7)
                         else
                             row.Bg:SetColorTexture(0.05, 0.05, 0.07, 0.7)
                         end
 
-                        row.HeaderText:Hide()
-                        row.HeaderIcon:Hide()
-                        row.HeaderCount:Hide()
+                        row.Highlight:Show()
 
                         row.NameText:Show()
                         row.NameText:SetText(d.name)
