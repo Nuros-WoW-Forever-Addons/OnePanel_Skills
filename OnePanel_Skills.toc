@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: OnePanel |cff00ccffSkills|r
+## Notes: Character skills, professions, and weapon proficiency tracking plugin for OnePanel Suite.
+## Author: OnePanel Suite Team
+## Version: 0.0.1
+## IconTexture: Interface\Icons\Trade_BlackSmithing
+## Dependencies: OnePanel, OnePanelUtils
+
+Core.lua
