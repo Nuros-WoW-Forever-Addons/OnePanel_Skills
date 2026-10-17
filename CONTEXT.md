@@ -71,6 +71,8 @@ When picking up development on this addon:
 - Upgraded engine integration to WoW Forever Beta (1.60.1 / Interface 16001) using `C_SkillInfo` API with legacy Classic Era fallback.
 - Added Camelot combat rating breakdown (Hit/Dodge/Parry & Crit offset vs same level and vs boss +3) for weapon proficiency skills.
 - Refactored category headers from `-` / `+` title bars to grey button banners (`UIPanelButtonTemplate` with centered text and `:Disable()`) matching the visual style of the Character Stats subpanel while maintaining interactive expand/collapse.
+- Upgraded progression bars to use modern gradient fill textures (`ui-castingbar-filling-applyingcrafting`, `ui-castingbar-filling-standard`, `common-stat-bar-white`) with inset background tracks (`common-stat-bar-BG`), 3D gloss reflections, and category-themed tinting.
+- Scaled up typography across the entire panel: 12pt skill names, category headers, search box, action buttons, and detail descriptions with drop shadows; 15pt bold gold detail title; 11–12pt status bar numbers with `OUTLINE` for crisp readability.
 
 ---
 
