@@ -72,7 +72,7 @@ When picking up development on this addon:
 - Added Camelot combat rating breakdown (Hit/Dodge/Parry & Crit offset vs same level and vs boss +3) for weapon proficiency skills.
 - Refactored category headers from `-` / `+` title bars to grey button banners (`UIPanelButtonTemplate` with centered text and `:Disable()`) matching the visual style of the Character Stats subpanel while maintaining interactive expand/collapse.
 - Upgraded progression bars to use authentic modern cast bar graphic fill atlases (`ui-castingbar-filling-applyingcrafting` for professions, `ui-castingbar-filling-channel` for secondary skills, `ui-castingbar-filling-standard` for weapons/other, and `ui-castingbar-full-*` for maxed skills) with full un-dimmed color, metallic cast bar borders (`ui-castingbar-frame`), inset dark tracks (`ui-castingbar-background`), and active spark pips (`ui-castingbar-pip`).
-- Scaled up typography across the entire panel: 14pt skill names with drop shadows and gold active selection, 13pt bold centered category headers, 13pt bold progress bar numbers with `OUTLINE`, 13pt search box and hint, 17pt gold detail headline, and 13pt high-contrast description text.
+- Scaled up typography across the entire panel: 14pt skill names with drop shadows and gold active selection, 13pt bold centered category headers, 13pt search box and hint, 17pt gold detail headline, and 13pt high-contrast description text. Progress bar numbers now use the exact same readable font (`Fonts\FRIZQT__.TTF` / Friz Quadrata TT) and 1px black drop shadow as Character Stats values, eliminating the cramped, blurry outline of condensed Arial.
 
 ---
 

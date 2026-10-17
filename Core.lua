@@ -160,12 +160,7 @@ local function GetStandardFont()
 end
 
 local function GetStatusBarFont()
-    local fontObj = _G.NumberFontNormal or _G.TextStatusBarText or _G.Number12FontOutline or _G.GameFontHighlightSmall
-    if fontObj and fontObj.GetFont then
-        local fontPath = fontObj:GetFont()
-        if fontPath and fontPath ~= "" then return fontPath end
-    end
-    return "Fonts\\ARIALN.TTF"
+    return GetStandardFont()
 end
 
 local function SafeHasAtlas(atlasName)
@@ -739,7 +734,7 @@ local function CreateSkillsView(parentFrame)
     detailBar.Spark = detailSpark
 
     local detailBarText = detailBar:CreateFontString(nil, "OVERLAY", nil, 3)
-    detailBarText:SetFont(GetStatusBarFont(), 13, "OUTLINE")
+    detailBarText:SetFont(GetStandardFont(), 13, "")
     detailBarText:SetPoint("CENTER", detailBar, "CENTER", 0, 0)
     detailBarText:SetTextColor(1, 1, 1, 1)
     detailBarText:SetShadowOffset(1, -1)
@@ -958,7 +953,7 @@ local function CreateSkillsView(parentFrame)
         bar.Spark = spark
 
         local barText = bar:CreateFontString(nil, "OVERLAY", nil, 3)
-        barText:SetFont(GetStatusBarFont(), 13, "OUTLINE")
+        barText:SetFont(GetStandardFont(), 13, "")
         barText:SetPoint("CENTER", bar, "CENTER", 0, 0)
         barText:SetTextColor(1, 1, 1, 1)
         barText:SetShadowOffset(1, -1)
