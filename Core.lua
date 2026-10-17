@@ -168,29 +168,78 @@ local function GetStatusBarFont()
     return "Fonts\\ARIALN.TTF"
 end
 
+local function SafeHasAtlas(atlasName)
+    if not atlasName then return false end
+    if C_Texture and C_Texture.GetAtlasInfo then
+        local ok, info = pcall(C_Texture.GetAtlasInfo, atlasName)
+        return ok and info ~= nil
+    end
+    return false
+end
+
 --- Modern gradient progress bar texture dispatcher (WoW Forever / Dragonflight Camelot UI)
-local function ApplyModernStatusBarTexture(bar, color, isCrafting)
+local function ApplyModernStatusBarTexture(bar, category, isMaxed)
     if not bar then return end
 
     local atlas = nil
-    if C_Texture and C_Texture.GetAtlasInfo then
-        if isCrafting and C_Texture.GetAtlasInfo("ui-castingbar-filling-applyingcrafting") then
+    if isMaxed then
+        if category == "Professions" and SafeHasAtlas("ui-castingbar-full-applyingcrafting") then
+            atlas = "ui-castingbar-full-applyingcrafting"
+        elseif SafeHasAtlas("ui-castingbar-full-standard") then
+            atlas = "ui-castingbar-full-standard"
+        end
+    elseif category == "Professions" then
+        if SafeHasAtlas("ui-castingbar-filling-applyingcrafting") then
             atlas = "ui-castingbar-filling-applyingcrafting"
-        elseif C_Texture.GetAtlasInfo("ui-castingbar-filling-standard") then
+        end
+    elseif category == "Secondary Skills" then
+        if SafeHasAtlas("ui-castingbar-filling-channel") then
+            atlas = "ui-castingbar-filling-channel"
+        end
+    else
+        if SafeHasAtlas("ui-castingbar-filling-standard") then
             atlas = "ui-castingbar-filling-standard"
-        elseif C_Texture.GetAtlasInfo("common-stat-bar-white") then
+        end
+    end
+
+    if not atlas then
+        if SafeHasAtlas("ui-castingbar-filling-standard") then
+            atlas = "ui-castingbar-filling-standard"
+        elseif SafeHasAtlas("common-stat-bar-white") then
             atlas = "common-stat-bar-white"
         end
     end
 
     if atlas then
         pcall(bar.SetStatusBarTexture, bar, atlas)
+        bar:SetStatusBarColor(1, 1, 1, 1)
     else
         bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+        local r, g, b = 0.5, 0.5, 0.6
+        if isMaxed then
+            r, g, b = 0.2, 0.9, 0.2
+        elseif category == "Professions" then
+            r, g, b = 1.0, 0.75, 0.1
+        elseif category == "Weapon Skills" then
+            r, g, b = 0.95, 0.35, 0.2
+        elseif category == "Secondary Skills" then
+            r, g, b = 0.2, 0.75, 1.0
+        end
+        bar:SetStatusBarColor(r, g, b, 1)
     end
+end
 
-    if color then
-        bar:SetStatusBarColor(color.r, color.g, color.b, 1)
+local function UpdateStatusBarSpark(bar, rank, maxRank)
+    if not bar or not bar.Spark then return end
+    if not maxRank or maxRank <= 0 then maxRank = 1 end
+
+    local pct = math.min(1, math.max(0, (rank or 0) / maxRank))
+    if pct > 0.02 and pct < 0.98 then
+        bar.Spark:ClearAllPoints()
+        bar.Spark:SetPoint("CENTER", bar, "LEFT", bar:GetWidth() * pct, 0)
+        bar.Spark:Show()
+    else
+        bar.Spark:Hide()
     end
 end
 
@@ -436,14 +485,14 @@ local function CreateSkillsView(parentFrame)
 
     -- Search EditBox
     local searchBox = CreateFrame("EditBox", "OnePanel_SkillsSearchBox", topBar, "InputBoxTemplate")
-    searchBox:SetSize(130, 22)
+    searchBox:SetSize(130, 24)
     searchBox:SetPoint("LEFT", topBar, "LEFT", 2, 0)
     searchBox:SetAutoFocus(false)
     searchBox:SetMaxLetters(40)
-    searchBox:SetFont(GetStandardFont(), 12, "")
+    searchBox:SetFont(GetStandardFont(), 13, "")
 
     local searchHint = searchBox:CreateFontString(nil, "OVERLAY")
-    searchHint:SetFont(GetStandardFont(), 12, "")
+    searchHint:SetFont(GetStandardFont(), 13, "")
     searchHint:SetTextColor(0.55, 0.55, 0.55, 1)
     searchHint:SetPoint("LEFT", searchBox, "LEFT", 4, 0)
     searchHint:SetText("Search skills...")
@@ -482,7 +531,7 @@ local function CreateSkillsView(parentFrame)
 
     -- Collapse / Expand All Button
     local toggleAllBtn = CreateSilverActionButton(topBar, "OnePanel_SkillsToggleAllBtn", "Collapse All")
-    toggleAllBtn:SetSize(82, 22)
+    toggleAllBtn:SetSize(88, 24)
     toggleAllBtn:SetPoint("LEFT", searchBox, "RIGHT", 6, 0)
 
     toggleAllBtn:SetScript("OnClick", function(self)
@@ -504,7 +553,7 @@ local function CreateSkillsView(parentFrame)
 
     -- Skills Count Summary (Top Right)
     local skillsSummary = topBar:CreateFontString(nil, "OVERLAY")
-    skillsSummary:SetFont(GetStandardFont(), 12, "")
+    skillsSummary:SetFont(GetStandardFont(), 13, "")
     skillsSummary:SetPoint("RIGHT", topBar, "RIGHT", -2, 0)
     skillsSummary:SetJustifyH("RIGHT")
     topBar.SkillsSummary = skillsSummary
@@ -637,11 +686,11 @@ local function CreateSkillsView(parentFrame)
     end
 
     -- SubPanel Details Widgets
-    local detailTitle = subPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    local detailTitle = subPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
     detailTitle:SetPoint("TOPLEFT", subPanel, "TOPLEFT", 10, -14)
     detailTitle:SetPoint("TOPRIGHT", subPanel, "TOPRIGHT", -10, -14)
     detailTitle:SetJustifyH("LEFT")
-    detailTitle:SetFont(GetStandardFont(), 15, "")
+    detailTitle:SetFont(GetStandardFont(), 17, "")
     detailTitle:SetTextColor(1, 0.82, 0, 1)
     detailTitle:SetShadowOffset(1, -1)
     detailTitle:SetShadowColor(0, 0, 0, 1)
@@ -649,7 +698,7 @@ local function CreateSkillsView(parentFrame)
 
     local detailCategory = subPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     detailCategory:SetPoint("TOPLEFT", detailTitle, "BOTTOMLEFT", 0, -4)
-    detailCategory:SetFont(GetStandardFont(), 12, "")
+    detailCategory:SetFont(GetStandardFont(), 13, "")
     detailCategory:SetShadowOffset(1, -1)
     detailCategory:SetShadowColor(0, 0, 0, 1)
     detailCategory:SetText("")
@@ -657,32 +706,40 @@ local function CreateSkillsView(parentFrame)
     local detailBar = CreateFrame("StatusBar", nil, subPanel)
     detailBar:SetPoint("TOPLEFT", detailCategory, "BOTTOMLEFT", 0, -8)
     detailBar:SetPoint("RIGHT", subPanel, "RIGHT", -10, 0)
-    detailBar:SetHeight(22)
-    ApplyModernStatusBarTexture(detailBar, COLOR_PROFESSION, false)
+    detailBar:SetHeight(24)
 
     local detailBarBg = detailBar:CreateTexture(nil, "BACKGROUND", nil, -2)
     detailBarBg:SetAllPoints(detailBar)
-    if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("common-stat-bar-BG") then
-        detailBarBg:SetAtlas("common-stat-bar-BG")
-    elseif C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("ui-castingbar-background") then
+    if SafeHasAtlas("ui-castingbar-background") then
         detailBarBg:SetAtlas("ui-castingbar-background")
     else
         detailBarBg:SetColorTexture(0.04, 0.04, 0.06, 0.95)
     end
+    detailBar.Bg = detailBarBg
 
     local detailBarBorder = detailBar:CreateTexture(nil, "OVERLAY", nil, 1)
-    detailBarBorder:SetPoint("TOPLEFT", detailBar, "TOPLEFT", -1, 1)
-    detailBarBorder:SetPoint("BOTTOMRIGHT", detailBar, "BOTTOMRIGHT", 1, -1)
-    detailBarBorder:SetColorTexture(0.20, 0.18, 0.15, 0.9)
+    detailBarBorder:SetPoint("TOPLEFT", detailBar, "TOPLEFT", -2, 2)
+    detailBarBorder:SetPoint("BOTTOMRIGHT", detailBar, "BOTTOMRIGHT", 2, -2)
+    if SafeHasAtlas("ui-castingbar-frame") then
+        detailBarBorder:SetAtlas("ui-castingbar-frame")
+    else
+        detailBarBorder:SetColorTexture(0.20, 0.18, 0.15, 0.9)
+    end
+    detailBar.Border = detailBarBorder
 
-    local detailBarGloss = detailBar:CreateTexture(nil, "OVERLAY", nil, 2)
-    detailBarGloss:SetPoint("TOPLEFT", detailBar, "TOPLEFT", 0, 0)
-    detailBarGloss:SetPoint("TOPRIGHT", detailBar, "TOPRIGHT", 0, 0)
-    detailBarGloss:SetHeight(11)
-    detailBarGloss:SetColorTexture(1, 1, 1, 0.10)
+    local detailSpark = detailBar:CreateTexture(nil, "OVERLAY", nil, 2)
+    detailSpark:SetSize(8, 24)
+    if SafeHasAtlas("ui-castingbar-pip") then
+        detailSpark:SetAtlas("ui-castingbar-pip")
+    else
+        detailSpark:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
+        detailSpark:SetBlendMode("ADD")
+    end
+    detailSpark:Hide()
+    detailBar.Spark = detailSpark
 
     local detailBarText = detailBar:CreateFontString(nil, "OVERLAY", nil, 3)
-    detailBarText:SetFont(GetStatusBarFont(), 12, "OUTLINE")
+    detailBarText:SetFont(GetStatusBarFont(), 13, "OUTLINE")
     detailBarText:SetPoint("CENTER", detailBar, "CENTER", 0, 0)
     detailBarText:SetTextColor(1, 1, 1, 1)
     detailBarText:SetShadowOffset(1, -1)
@@ -695,10 +752,10 @@ local function CreateSkillsView(parentFrame)
     detailDesc:SetJustifyH("LEFT")
     detailDesc:SetJustifyV("TOP")
     detailDesc:SetWordWrap(true)
-    detailDesc:SetFont(GetStandardFont(), 12, "")
-    detailDesc:SetSpacing(3)
-    detailDesc:SetHeight(200)
-    detailDesc:SetTextColor(0.92, 0.92, 0.92, 1)
+    detailDesc:SetFont(GetStandardFont(), 13, "")
+    detailDesc:SetSpacing(4)
+    detailDesc:SetHeight(220)
+    detailDesc:SetTextColor(0.95, 0.95, 0.95, 1)
     detailDesc:SetShadowOffset(1, -1)
     detailDesc:SetShadowColor(0, 0, 0, 1)
     detailDesc:SetText("Select a skill from the list on the left to inspect rank details, combat ratings, or manage crafting patterns.")
@@ -706,18 +763,18 @@ local function CreateSkillsView(parentFrame)
     local actionsContainer = CreateFrame("Frame", nil, subPanel)
     actionsContainer:SetPoint("BOTTOMLEFT", subPanel, "BOTTOMLEFT", 8, 10)
     actionsContainer:SetPoint("BOTTOMRIGHT", subPanel, "BOTTOMRIGHT", -8, 10)
-    actionsContainer:SetHeight(56)
+    actionsContainer:SetHeight(60)
 
     local openTradeskillBtn = CreateSilverActionButton(actionsContainer, "OnePanel_SkillsOpenTradeskillBtn", "Open Recipes")
     openTradeskillBtn:SetPoint("TOPLEFT", actionsContainer, "TOPLEFT", 0, 0)
     openTradeskillBtn:SetPoint("TOPRIGHT", actionsContainer, "TOPRIGHT", 0, 0)
-    openTradeskillBtn:SetHeight(22)
+    openTradeskillBtn:SetHeight(26)
     openTradeskillBtn:Hide()
 
     local unlearnBtn = CreateSilverActionButton(actionsContainer, "OnePanel_SkillsUnlearnBtn", "Unlearn")
     unlearnBtn:SetPoint("BOTTOMLEFT", actionsContainer, "BOTTOMLEFT", 0, 0)
     unlearnBtn:SetPoint("BOTTOMRIGHT", actionsContainer, "BOTTOMRIGHT", 0, 0)
-    unlearnBtn:SetHeight(22)
+    unlearnBtn:SetHeight(26)
     unlearnBtn:Hide()
 
     StaticPopupDialogs["ONEPANEL_SKILLS_UNLEARN"] = {
@@ -748,7 +805,7 @@ local function CreateSkillsView(parentFrame)
         end
 
         detailTitle:SetText(data.name)
-        detailCategory:SetText(categoryName and ("|cff00ccff[ " .. categoryName .. " ]|r") or "")
+        detailCategory:SetText(categoryName and ("|cff00e5ff[ " .. categoryName .. " ]|r") or "")
 
         local rank = data.rank or 0
         local maxRank = data.maxRank or 1
@@ -759,19 +816,8 @@ local function CreateSkillsView(parentFrame)
         detailBar:SetValue(math.min(maxRank, rank))
 
         local isMaxed = (rank >= maxRank)
-        local barColor = COLOR_SECONDARY
-        local isCraft = false
-
-        if isMaxed then
-            barColor = COLOR_MAXED
-        elseif categoryName == "Professions" then
-            barColor = COLOR_PROFESSION
-            isCraft = true
-        elseif categoryName == "Weapon Skills" then
-            barColor = COLOR_WEAPON
-        end
-
-        ApplyModernStatusBarTexture(detailBar, barColor, isCraft)
+        ApplyModernStatusBarTexture(detailBar, categoryName, isMaxed)
+        UpdateStatusBarSpark(detailBar, rank, maxRank)
 
         local pct = math.min(100, math.floor((rank / maxRank) * 100))
         if data.modifier and data.modifier > 0 then
@@ -827,7 +873,7 @@ local function CreateSkillsView(parentFrame)
 
         local row = CreateFrame("Button", "OnePanel_SkillsRow" .. idx, listContent)
         row:SetWidth(286)
-        row:SetHeight(38)
+        row:SetHeight(40)
 
         local bg = row:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints(row)
@@ -857,8 +903,8 @@ local function CreateSkillsView(parentFrame)
         end
         local hFont = headerBtn:GetFontString()
         if hFont then
-            hFont:SetFont(GetStandardFont(), 12, "")
-            hFont:SetTextColor(1, 0.82, 0, 1)
+            hFont:SetFont(GetStandardFont(), 13, "")
+            hFont:SetTextColor(1, 0.85, 0.1, 1)
             hFont:SetShadowOffset(1, -1)
             hFont:SetShadowColor(0, 0, 0, 1)
         end
@@ -866,27 +912,24 @@ local function CreateSkillsView(parentFrame)
 
         -- Skill row elements
         local nameText = row:CreateFontString(nil, "ARTWORK")
-        nameText:SetFont(GetStandardFont(), 12, "")
-        nameText:SetTextColor(1, 1, 1, 1)
+        nameText:SetFont(GetStandardFont(), 14, "")
+        nameText:SetTextColor(0.95, 0.95, 0.95, 1)
         nameText:SetShadowOffset(1, -1)
         nameText:SetShadowColor(0, 0, 0, 1)
-        nameText:SetPoint("LEFT", row, "LEFT", 10, 0)
-        nameText:SetPoint("RIGHT", row, "RIGHT", -152, 0)
+        nameText:SetPoint("LEFT", row, "LEFT", 8, 0)
+        nameText:SetPoint("RIGHT", row, "RIGHT", -154, 0)
         nameText:SetJustifyH("LEFT")
         nameText:SetWordWrap(false)
         row.NameText = nameText
 
         -- Modern Gradient Status Bar
         local bar = CreateFrame("StatusBar", nil, row)
-        bar:SetSize(140, 20)
+        bar:SetSize(144, 22)
         bar:SetPoint("RIGHT", row, "RIGHT", -6, 0)
-        ApplyModernStatusBarTexture(bar, COLOR_PROFESSION, false)
 
         local barBg = bar:CreateTexture(nil, "BACKGROUND", nil, -2)
         barBg:SetAllPoints(bar)
-        if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("common-stat-bar-BG") then
-            barBg:SetAtlas("common-stat-bar-BG")
-        elseif C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("ui-castingbar-background") then
+        if SafeHasAtlas("ui-castingbar-background") then
             barBg:SetAtlas("ui-castingbar-background")
         else
             barBg:SetColorTexture(0.04, 0.04, 0.06, 0.95)
@@ -894,18 +937,28 @@ local function CreateSkillsView(parentFrame)
         bar.Bg = barBg
 
         local barBorder = bar:CreateTexture(nil, "OVERLAY", nil, 1)
-        barBorder:SetPoint("TOPLEFT", bar, "TOPLEFT", -1, 1)
-        barBorder:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 1, -1)
-        barBorder:SetColorTexture(0.20, 0.18, 0.15, 0.9)
+        barBorder:SetPoint("TOPLEFT", bar, "TOPLEFT", -2, 2)
+        barBorder:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 2, -2)
+        if SafeHasAtlas("ui-castingbar-frame") then
+            barBorder:SetAtlas("ui-castingbar-frame")
+        else
+            barBorder:SetColorTexture(0.20, 0.18, 0.15, 0.9)
+        end
+        bar.Border = barBorder
 
-        local barGloss = bar:CreateTexture(nil, "OVERLAY", nil, 2)
-        barGloss:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
-        barGloss:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
-        barGloss:SetHeight(10)
-        barGloss:SetColorTexture(1, 1, 1, 0.10)
+        local spark = bar:CreateTexture(nil, "OVERLAY", nil, 2)
+        spark:SetSize(8, 22)
+        if SafeHasAtlas("ui-castingbar-pip") then
+            spark:SetAtlas("ui-castingbar-pip")
+        else
+            spark:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
+            spark:SetBlendMode("ADD")
+        end
+        spark:Hide()
+        bar.Spark = spark
 
         local barText = bar:CreateFontString(nil, "OVERLAY", nil, 3)
-        barText:SetFont(GetStatusBarFont(), 11, "OUTLINE")
+        barText:SetFont(GetStatusBarFont(), 13, "OUTLINE")
         barText:SetPoint("CENTER", bar, "CENTER", 0, 0)
         barText:SetTextColor(1, 1, 1, 1)
         barText:SetShadowOffset(1, -1)
@@ -958,7 +1011,7 @@ local function CreateSkillsView(parentFrame)
                     local row = GetOrCreateRow(rowIndex)
                     row:ClearAllPoints()
                     row:SetPoint("TOPLEFT", listContent, "TOPLEFT", 1, yOffset)
-                    row:SetHeight(22)
+                    row:SetHeight(26)
 
                     row.Bg:Hide()
                     row.Highlight:Hide()
@@ -969,6 +1022,7 @@ local function CreateSkillsView(parentFrame)
                     local headerBtn = row.HeaderButton
                     headerBtn:Show()
                     headerBtn:SetAllPoints(row)
+                    headerBtn:SetHeight(26)
                     headerBtn:SetText(d.name)
                     headerBtn:Disable()
                     headerBtn:EnableMouse(true)
@@ -988,7 +1042,7 @@ local function CreateSkillsView(parentFrame)
 
                     row:Show()
                     rowIndex = rowIndex + 1
-                    yOffset = yOffset - 26
+                    yOffset = yOffset - 30
                 else
                     local shouldShow = true
                     if searchQuery ~= "" then
@@ -1000,7 +1054,7 @@ local function CreateSkillsView(parentFrame)
                         local row = GetOrCreateRow(rowIndex)
                         row:ClearAllPoints()
                         row:SetPoint("TOPLEFT", listContent, "TOPLEFT", 1, yOffset)
-                        row:SetHeight(38)
+                        row:SetHeight(40)
 
                         row.HeaderButton:Hide()
 
@@ -1025,21 +1079,8 @@ local function CreateSkillsView(parentFrame)
                         row.Bar:SetValue(math.min(maxRank, rank))
 
                         local isMaxed = (rank >= maxRank)
-                        local color
-                        local isCrafting = false
-
-                        if isMaxed then
-                            color = COLOR_MAXED
-                        elseif currentCategory == "Professions" then
-                            color = COLOR_PROFESSION
-                            isCrafting = true
-                        elseif currentCategory == "Weapon Skills" then
-                            color = COLOR_WEAPON
-                        else
-                            color = COLOR_SECONDARY
-                        end
-
-                        ApplyModernStatusBarTexture(row.Bar, color, isCrafting)
+                        ApplyModernStatusBarTexture(row.Bar, currentCategory, isMaxed)
+                        UpdateStatusBarSpark(row.Bar, rank, maxRank)
 
                         if d.modifier and d.modifier > 0 then
                             row.BarText:SetText(string.format("%s (+%d) / %s", FormatNumber(rank), d.modifier, FormatNumber(maxRank)))
@@ -1056,8 +1097,11 @@ local function CreateSkillsView(parentFrame)
                         local isSelected = (selectedSkillName == d.name)
                         row.SelectedHighlight:SetShown(isSelected)
                         if isSelected then
+                            row.NameText:SetTextColor(1, 0.85, 0.2, 1)
                             selectedData = d
                             selectedCat = currentCategory
+                        else
+                            row.NameText:SetTextColor(0.95, 0.95, 0.95, 1)
                         end
 
                         local thisCategory = currentCategory
@@ -1071,7 +1115,7 @@ local function CreateSkillsView(parentFrame)
 
                         row:Show()
                         rowIndex = rowIndex + 1
-                        yOffset = yOffset - 42
+                        yOffset = yOffset - 44
                     end
                 end
             end
